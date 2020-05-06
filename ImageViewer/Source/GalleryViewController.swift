@@ -34,8 +34,8 @@ open class GalleryViewController: UIPageViewController, ItemControllerDelegate {
     fileprivate var initialPresentationDone = false
 
     // DATASOURCE/DELEGATE
-    fileprivate let itemsDelegate: GalleryItemsDelegate?
-    fileprivate let itemsDataSource: GalleryItemsDataSource
+    fileprivate weak var itemsDelegate: GalleryItemsDelegate?
+    fileprivate weak var itemsDataSource: GalleryItemsDataSource?
     fileprivate let pagingDataSource: GalleryPagingDataSource
 
     // CONFIGURATION
@@ -441,7 +441,9 @@ open class GalleryViewController: UIPageViewController, ItemControllerDelegate {
 
     @objc fileprivate func showThumbnails() {
 
-        let thumbnailsController = ThumbnailsViewController(itemsDataSource: self.itemsDataSource)
+        guard let itemsDataSource = self.itemsDataSource else {return}
+
+        let thumbnailsController = ThumbnailsViewController(itemsDataSource: itemsDataSource)
 
         if let closeButton = seeAllCloseButton {
             thumbnailsController.closeButton = closeButton
@@ -464,7 +466,7 @@ open class GalleryViewController: UIPageViewController, ItemControllerDelegate {
 
     open func page(toIndex index: Int) {
 
-        guard currentIndex != index && index >= 0 && index < self.itemsDataSource.itemCount() else { return }
+        guard let itemsDataSource = self.itemsDataSource, currentIndex != index && index >= 0 && index < itemsDataSource.itemCount() else { return }
 
         let imageViewController = self.pagingDataSource.createItemController(index)
         let direction: UIPageViewController.NavigationDirection = index > currentIndex ? .forward : .reverse
@@ -489,9 +491,11 @@ open class GalleryViewController: UIPageViewController, ItemControllerDelegate {
 
     func removePage(atIndex index: Int, completion: @escaping () -> Void) {
 
+        guard let itemsDataSource = self.itemsDataSource else {return}
+
         // If removing last item, go back, otherwise, go forward
 
-        let direction: UIPageViewController.NavigationDirection = index < self.itemsDataSource.itemCount() ? .forward : .reverse
+        let direction: UIPageViewController.NavigationDirection = index < itemsDataSource.itemCount() ? .forward : .reverse
 
         let newIndex = direction == .forward ? index : index - 1
 
@@ -503,7 +507,7 @@ open class GalleryViewController: UIPageViewController, ItemControllerDelegate {
 
     open func reload(atIndex index: Int) {
 
-        guard index >= 0 && index < self.itemsDataSource.itemCount() else { return }
+        guard let itemsDataSource = self.itemsDataSource, index >= 0 && index < itemsDataSource.itemCount() else { return }
 
         guard let firstVC = viewControllers?.first, let itemController = firstVC as? ItemController else { return }
 
@@ -560,6 +564,9 @@ open class GalleryViewController: UIPageViewController, ItemControllerDelegate {
 
             itemController.closeDecorationViews(decorationViewsFadeDuration)
         }
+
+        itemsDelegate = nil
+        itemsDataSource = nil
 
         UIView.animate(withDuration: decorationViewsFadeDuration, animations: { [weak self] in
 
@@ -676,16 +683,31 @@ open class GalleryViewController: UIPageViewController, ItemControllerDelegate {
             guard let image = item.image else { return }
             let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
             self.present(activityVC, animated: true)
+            if UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiom.pad {
+                self.prepareForIpad(source: self.view, to: activityVC)
+            }
 
         case (_ as VideoViewController, let item as VideoView):
             guard let videoUrl = ((item.player?.currentItem?.asset) as? AVURLAsset)?.url else { return }
             let activityVC = UIActivityViewController(activityItems: [videoUrl], applicationActivities: nil)
             self.present(activityVC, animated: true)
+            if UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiom.pad {
+                self.prepareForIpad(source: self.view, to: activityVC)
+            }
 
         default:  return
         }
     }
 
+    fileprivate func prepareForIpad(source: UIView, to activityVC: UIActivityViewController) {
+
+        if let popOver = activityVC.popoverPresentationController {
+            popOver.sourceView = source
+            popOver.sourceRect = CGRect(x: source.bounds.midX, y: source.bounds.midY, width: 0, height: 0)
+            popOver.permittedArrowDirections = []
+        }
+    }
+    
     public func itemController(_ controller: ItemController, didSwipeToDismissWithDistanceToEdge distance: CGFloat) {
 
         if decorationViewsHidden == false {
